@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="fa">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>ثبت سفارش — فروشگاه لوازم موبایل</title>
+  <style>
+    :root{--bg:#f6f8fb;--card:#ffffff;--accent:#1e88e5;--muted:#6b7280}
+    *{box-sizing:border-box;font-family: Vazirmatn, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial}
+    body{margin:0;background:var(--bg);color:#0f172a;direction:rtl}
+    .container{max-width:980px;margin:32px auto;padding:20px}
+    header{display:flex;gap:16px;align-items:center;justify-content:space-between}
+    h1{margin:0;font-size:20px}
+    .card{background:var(--card);border-radius:12px;padding:16px;box-shadow:0 6px 18px rgba(15,23,42,.06)}
+
+    /* فرم کاربر */
+    .user-form{display:flex;gap:12px;align-items:center}
+    .user-form input{padding:10px 12px;border-radius:8px;border:1px solid #e6edf3;min-width:0}
+    .user-form input[type="email"]{width:300px}
+    .user-form .btn{background:var(--accent);color:#fff;padding:10px 14px;border-radius:8px;border:0;cursor:pointer}
+
+    /* محصولات */
+    .products{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px;margin-top:18px}
+    .product{padding:14px;border-radius:10px;background:linear-gradient(180deg,#fff,#fbfdff);display:flex;flex-direction:column;gap:8px;align-items:flex-end}
+    .product .title{font-weight:700}
+    .product .meta{font-size:13px;color:var(--muted)}
+    .product .price{font-weight:700;color:var(--accent)}
+    .product button{margin-top:8px;padding:8px 12px;border-radius:8px;border:0;background:#0ea5a4;color:#fff;cursor:pointer}
+    .product button:disabled{opacity:.5;cursor:not-allowed}
+
+    /* لیست ثبت‌ها */
+    .registrations{margin-top:20px}
+    .registrations ul{list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:8px}
+    .reg-item{background:#fff;padding:10px;border-radius:8px;display:flex;justify-content:space-between;align-items:center}
+    .small{font-size:13px;color:var(--muted)}
+
+    /* پیغام */
+    .toast{position:fixed;left:20px;bottom:20px;background:#111;color:#fff;padding:10px 14px;border-radius:8px;box-shadow:0 6px 20px rgba(2,6,23,.3);display:none}
+
+    @media (max-width:520px){
+      .user-form{flex-direction:column;align-items:stretch}
+      .user-form input[type="email"]{width:100%}
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>فروشگاه لوازم موبایل — ثبت محصول برای مشتری</h1>
+      <div class="small">لطفاً نام و ایمیل را وارد کنید و سپس روی محصول موردنظر کلیک کنید</div>
+    </header>
+
+    <section class="card" aria-labelledby="user-form-title">
+      <h2 id="user-form-title" style="font-size:15px;margin-bottom:10px">اطلاعات مشتری</h2>
+      <form id="userForm" class="user-form" onsubmit="return false;">
+        <input id="nameInput" type="text" placeholder="نام کامل" required aria-label="نام کامل">
+        <input id="emailInput" type="email" placeholder="ایمیل" required aria-label="ایمیل">
+        <button id="clearBtn" type="button" class="btn" title="پاک کردن">پاک کن</button>
+      </form>
+    </section>
+
+    <section class="card">
+      <h2 style="font-size:15px;margin:0 0 12px 0">محصولات</h2>
+      <div class="products" id="productsList">
+        <!-- محصولات به صورت ایستا؛ هر محصول یک دکمه دارد -->
+        <div class="product" data-id="P-101">
+          <div class="title">قاب ژله‌ای شفاف</div>
+          <div class="meta">Brand: Nillkin — سازگار با: Samsung A14</div>
+          <div class="price">8€</div>
+          <button class="addBtn">ثبت برای مشتری</button>
+        </div>
+
+        <div class="product" data-id="P-102">
+          <div class="title">شارژر فست 25W</div>
+          <div class="meta">Brand: Samsung — PD / Fast Charge</div>
+          <div class="price">18€</div>
+          <button class="addBtn">ثبت برای مشتری</button>
+        </div>
+
+        <div class="product" data-id="P-103">
+          <div class="title">پاوربانک 20000mAh</div>
+          <div class="meta">Brand: Xiaomi — ظرفیت: 20,000mAh</div>
+          <div class="price">28€</div>
+          <button class="addBtn">ثبت برای مشتری</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="card registrations" aria-labelledby="regs">
+      <h2 id="regs" style="font-size:15px;margin:0 0 12px 0">ثبت‌های این جلسه</h2>
+      <ul id="regsList"></ul>
+    </section>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script>
+    // کمک‌کننده‌ها
+    const nameInput = document.getElementById('nameInput');
+    const emailInput = document.getElementById('emailInput');
+    const regsList = document.getElementById('regsList');
+    const toast = document.getElementById('toast');
+
+    // بارگذاری ثبت‌های قبلی از localStorage (اختیاری)
+    const STORAGE_KEY = 'product_registrations_v1';
+    let registrations = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+
+    function showToast(txt){
+      toast.textContent = txt;
+      toast.style.display = 'block';
+      setTimeout(()=>{toast.style.display='none'},2500);
+    }
+
+    function isValidEmail(email){
+      // بررسی ساده ایمیل
+      return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+    }
+
+    function renderRegs(){
+      regsList.innerHTML = '';
+      if(registrations.length === 0){
+        regsList.innerHTML = '<li class="small">هیچ ثبتیه‌ای وجود ندارد</li>';
+        return;
+      }
+      registrations.slice().reverse().forEach(r=>{
+        const li = document.createElement('li');
+        li.className = 'reg-item';
+        li.innerHTML = `<div>
+            <div style="font-weight:700">${escapeHtml(r.customerName)} — ${escapeHtml(r.productName)}</div>
+            <div class="small">${escapeHtml(r.email)} — ${new Date(r.time).toLocaleString('fa-IR')}</div>
+          </div>
+          <div class="small">کد: ${escapeHtml(r.productId)}</div>`;
+        regsList.appendChild(li);
+      });
+    }
+
+    function escapeHtml(str){
+      return (str+'').replace(/[&<>\"']/g, function(m){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m];});
+    }
+
+    // دکمه‌ها
+    document.querySelectorAll('.addBtn').forEach(btn=>{
+      btn.addEventListener('click', (e)=>{
+        const productEl = e.target.closest('.product');
+        const productId = productEl.dataset.id;
+        const productName = productEl.querySelector('.title').textContent.trim();
+
+        const name = nameInput.value.trim();
+        const email = emailInput.value.trim();
+
+        if(!name){ showToast('لطفاً نام را وارد کنید'); nameInput.focus(); return; }
+        if(!email || !isValidEmail(email)){ showToast('ایمیل معتبر وارد کنید'); emailInput.focus(); return; }
+
+        // ثبت
+        const record = { productId, productName, customerName: name, email, time: Date.now() };
+
+        // ارسال به n8n
+        fetch('http://localhost:5678/webhook-test/c5ccdf98-4fce-4c4e-a407-84d59b2752ab', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(record)
+        }).then(resp => {
+          if(!resp.ok) throw new Error('وضعیت پاسخ مناسب نیست: ' + resp.status);
+          return resp.text();
+        }).then(()=>{
+          // تنها یکبار درون آرایه ذخیره می‌کنیم
+          registrations.push(record);
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(registrations));
+
+          // بازخورد به کاربر
+          showToast(`محصول «${productName}» برای ${name} ثبت شد.`);
+          renderRegs();
+
+          // غیرفعال‌سازی دکمه برای همین مشتری (اختیاری)
+          e.target.disabled = true;
+          e.target.textContent = 'ثبت شد ✅';
+        }).catch(err => {
+          console.error('خطا در ارسال به n8n:', err);
+          // حتی اگر ارسال به n8n شکست خورد، همچنان ثبت محلی انجام شود یا نه؟
+          // در این نسخه، ثبت محلی هم انجام می‌شود تا داده از بین نرود.
+          registrations.push(record);
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(registrations));
+          showToast('خطا در ارسال به سرور، ثبت به‌صورت محلی انجام شد.');
+          renderRegs();
+          e.target.disabled = true;
+          e.target.textContent = 'ثبت (آفلاین)';
+        });
+
+      });
+    });
+
+    // پاک‌سازی فرم
+    document.getElementById('clearBtn').addEventListener('click', ()=>{
+      nameInput.value = '';
+      emailInput.value = '';
+      document.querySelectorAll('.addBtn').forEach(b=>{b.disabled=false; b.textContent='ثبت برای مشتری'});
+      showToast('فرم پاک شد');
+    });
+
+    // بارگذاری اولیه
+    renderRegs();
+
+  </script>
+</body>
+</html>
